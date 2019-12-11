@@ -1,6 +1,8 @@
 # fping-exporter
 Prometheus Exporter for fping that can give similar output to Smokeping.
 
+## Install
+
 For an easy install you can use [pipenv](https://pipenv.readthedocs.io/en/latest/).
 
 ```bash
@@ -17,7 +19,33 @@ cd fping-exporter
 pip install prometheus_client
 ```
 
-Once you have it installed you need something to run it and to keep it running. I recommend using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/):
+## Configuration
+
+Now that you have everything installed you need to create a configuration file. The format is rather simple and mostly explained in the [default configuration](https://github.com/WoLpH/fping-exporter/blob/master/fping_exporter.default.cfg).
+
+You can save the file in any (or multiple) of the following locations:
+
+ - `/etc/fping_exporter.cfg`
+ - `/usr/local/etc/fping_exporter.cfg`
+ - `~/.fping_exporter.cfg`
+ - `~/config/fping_exporter.cfg`
+ - `fping_exporter.cfg`
+
+## Running
+
+Simply running the script to test can be done like this:
+
+```bash
+pipenv run python fping_exporter.py
+```
+Or without pipenv:
+```bash
+python fping_exporter.py
+```
+
+## Running as a service
+
+I recommend using [pm2](https://pm2.keymetrics.io/docs/usage/quick-start/):
 
 ```bash
 pm2 start
