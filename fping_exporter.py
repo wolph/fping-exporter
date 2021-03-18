@@ -4,6 +4,7 @@ import sys
 import pprint
 import logging
 import asyncio
+import functools
 import collections
 import configparser
 import prometheus_client
@@ -62,30 +63,7 @@ class Host(dict):
         for key, value in items.items():
             self[key] = value
 
-    async def run(self):
-        self.started = datetime.now()
-        args = ['fping', '--timestamp', '--addr']
-        settings = dict()
-        for key, cast in FPING_SETTINGS.items():
-            value = self.get(key)
-            if value:
-                value = cast(value)
-                settings[key] = value
-
-                if isinstance(value, bool):
-                    args.append(f'--{key}')
-                else:
-                    args.append(f'--{key}={value}')
-
-        if not self.get('count'):
-            args.append('--loop')
-
-        args.append(self.address)
-
-        logger.warning('Running %s:%s with: %s', self.name, self['group'],
-                    settings)
-        assert settings['period']
-
+    async def run_process(self, args):
         logger.info('%r', ' '.join(args))
         self.process = await asyncio.create_subprocess_exec(
             *args,
@@ -124,7 +102,39 @@ class Host(dict):
                         await self.process.terminate()
 
                     break
+        self.process == None
 
+    async def run(self, min_backoff=1, max_backoff=600):
+        self.started = datetime.now()
+        args = ['fping', '--timestamp', '--addr']
+        settings = dict()
+        for key, cast in FPING_SETTINGS.items():
+            value = self.get(key)
+            if value:
+                value = cast(value)
+                settings[key] = value
+
+                if isinstance(value, bool):
+                    args.append(f'--{key}')
+                else:
+                    args.append(f'--{key}={value}')
+
+        if not self.get('count'):
+            args.append('--loop')
+
+        args.append(self.address)
+
+        logger.warning('Running %s:%s with: %s', self.name, self['group'],
+                    settings)
+        assert settings['period']
+
+        backoff = min_backoff
+        while True:
+            await self.run_process(args)
+            logging.info('backing off %s:%s with %ss', self.name,
+                         self['group'], backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(max_backoff, backoff * 2)
 
 
 class Hosts(dict):
@@ -213,8 +223,11 @@ class Config(configparser.ConfigParser):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+
     config = Config()
-    prometheus_client.start_http_server(9999)
+    listen_port = config.getint('fping_exporter', 'listen_port', fallback=9999)
+    prometheus_client.start_http_server(listen_port)
     argv = sys.argv[1:]
 
     futures = []
