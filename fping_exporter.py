@@ -84,22 +84,35 @@ class Host(dict):
                 (?P<latency>[.0-9]+)\s+ms\s+
                 .*
                 ''', line, re.VERBOSE)
-                assert match, 'No match for %r' % line
+                if match:
+                    # Convert to seconds
+                    latency = 0.001 * float(match.group('latency'))
+                elif 'timed out' in line:
+                    latency = self.get('timeout')
+                    logging.warning( 
+                        'timeout for %s.%s: %s',
+                        self.get('group'), self.name, self.get('address'))
+                    if latency:
+                        latency = float(latency)
+                    else:
+                        continue
+                else:
+                    logging.fatal('Unexpected output from fping: %r', line)
+                    continue
+
                 
                 label_values = dict(
                     group=self.get('group'),
                     name=self.name,
                     address=match.group('address'),
                 )
-                histogram.labels(**label_values).observe(
-                    # Convert to seconds
-                    0.001 * float(match.group('latency')))
+                histogram.labels(**label_values).observe(latency)
             else:
                 self.error = await self.process.stderr.readline()
                 if self.error:
                     logging.fatal('%r error: %s', self, self.error.strip())
                     if not self.process.returncode:
-                        await self.process.terminate()
+                        self.process.terminate()
 
                     break
         self.process == None
@@ -199,7 +212,7 @@ class Config(configparser.ConfigParser):
     def read(self, *args, **kwargs):
         super().read(*args, **kwargs)
 
-        hosts = Hosts()
+        Hosts()
         for key in self:
             if key.startswith('group:'):
                 value = self[key]
@@ -222,7 +235,7 @@ class Config(configparser.ConfigParser):
                 self.groups[group_name].hosts[name].update(value)
 
 
-def main():
+async def main():
     logging.basicConfig(level=logging.INFO)
 
     config = Config()
@@ -240,7 +253,8 @@ def main():
             print('\t', name, host)
             futures.append(host.run())
 
-    asyncio.run(asyncio.wait(futures))
+    await asyncio.gather(*futures)
+
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
